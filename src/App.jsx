@@ -558,7 +558,7 @@ const AddEditProductScreen = ({ navigate, editProduct, prefill }) => {
       if (extracted.category && CATEGORIES.includes(extracted.category)) set("category", extracted.category);
     } catch (err) {
       console.error("Analyze error:", err);
-      setAnalyzeError(err.message.includes("api_key") || err.message.includes("API key") ? "Invalid API key. Check Settings." : "Couldn't analyze photo. Try again.");
+      setAnalyzeError(err.message || "Unknown error");
     } finally {
       setAnalyzing(false);
     }
