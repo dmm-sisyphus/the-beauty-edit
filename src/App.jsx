@@ -458,6 +458,32 @@ const ProductListScreen = ({ navigate }) => {
   );
 };
 
+// ─── Image resize helper ─────────────────────────────────────────────
+function resizeImageToDataURL(file, maxDimension = 800, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("FileReader failed"));
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Image load failed"));
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > height) {
+          if (width > maxDimension) { height = Math.round(height * maxDimension / width); width = maxDimension; }
+        } else {
+          if (height > maxDimension) { width = Math.round(width * maxDimension / height); height = maxDimension; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 // ─── SCREEN: Add / Edit Product ─────────────────────────────────────
 const AddEditProductScreen = ({ navigate, editProduct, prefill }) => {
   const { dispatch } = useContext(AppContext);
@@ -471,6 +497,18 @@ const AddEditProductScreen = ({ navigate, editProduct, prefill }) => {
   const [newThought, setNewThought] = useState({ type: "first-impression", text: "" });
   const [section, setSection] = useState(0);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const fileInputRef = useRef(null);
+  const handleImageChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    try {
+      const dataUrl = await resizeImageToDataURL(file);
+      set("imageUri", dataUrl);
+    } catch (err) {
+      console.error("Photo processing failed:", err);
+    }
+  };
 
   const save = () => {
     if (!form.name.trim()) return;
@@ -521,13 +559,28 @@ const AddEditProductScreen = ({ navigate, editProduct, prefill }) => {
           <Select label="Category" options={CATEGORIES} value={form.category} onChange={e => set("category", e.target.value)} />
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: colors.textLight, marginBottom: 6 }}>Photo</label>
-            <div style={{
-              width: "100%", height: 140, borderRadius: 14, border: `2px dashed ${colors.border}`, background: colors.cream,
-              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer",
-            }}>
-              <Icons.Camera style={{ width: 32, height: 32, color: colors.rose, marginBottom: 8 }} />
-              <span style={{ fontSize: 13, color: colors.textLight }}>Tap to add a photo</span>
-            </div>
+            <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageChange} style={{ display: "none" }} />
+            {form.imageUri ? (
+              <div style={{ position: "relative", width: "100%", height: 200, borderRadius: 14, overflow: "hidden" }}>
+                <img src={form.imageUri} alt="Product photo" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                <button onClick={() => fileInputRef.current?.click()}
+                  style={{ position: "absolute", inset: 0, width: "100%", background: "transparent", border: "none", cursor: "pointer" }}
+                  aria-label="Change photo" />
+                <button onClick={() => set("imageUri", "")}
+                  style={{ position: "absolute", top: 10, right: 10, width: 32, height: 32, borderRadius: 16,
+                    background: "rgba(0,0,0,0.55)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                  aria-label="Remove photo">
+                  <Icons.X style={{ width: 16, height: 16, color: "#fff" }} />
+                </button>
+              </div>
+            ) : (
+              <div onClick={() => fileInputRef.current?.click()}
+                style={{ width: "100%", height: 140, borderRadius: 14, border: `2px dashed ${colors.border}`, background: colors.cream,
+                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                <Icons.Camera style={{ width: 32, height: 32, color: colors.rose, marginBottom: 8 }} />
+                <span style={{ fontSize: 13, color: colors.textLight }}>Tap to add a photo</span>
+              </div>
+            )}
           </div>
           <Btn onClick={() => setSection(1)} style={{ width: "100%" }}>Next: Purchase Details →</Btn>
         </div>
