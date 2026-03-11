@@ -464,6 +464,63 @@ const ProductListScreen = ({ navigate }) => {
   );
 };
 
+// ─── URL product fetch helper ────────────────────────────────────────
+async function fetchProductFromUrl(url) {
+  const proxyRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+  if (!proxyRes.ok) throw new Error("Failed to reach the page");
+  const proxyData = await proxyRes.json();
+  const html = proxyData.contents;
+  if (!html) throw new Error("No content returned");
+
+  const getMeta = (prop) => {
+    const m = html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']+)["']`, 'i'))
+      || html.match(new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`, 'i'));
+    return m?.[1]?.trim() || '';
+  };
+
+  const ogTitle = getMeta('og:title') || html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1]?.trim() || '';
+  const ogImage = getMeta('og:image');
+  const ogDescription = getMeta('og:description');
+  const siteName = getMeta('og:site_name');
+
+  let jsonLd = {};
+  const jsonLdMatch = html.match(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
+  if (jsonLdMatch) { try { jsonLd = JSON.parse(jsonLdMatch[1]); } catch (e) {} }
+  const price = jsonLd?.offers?.price || (Array.isArray(jsonLd?.offers) ? jsonLd.offers[0]?.price : null);
+
+  let extracted = { name: ogTitle, brand: siteName };
+  const apiKey = localStorage.getItem("the-beauty-edit-api-key");
+  if (apiKey && (ogTitle || ogDescription)) {
+    const context = `URL: ${url}\nTitle: ${ogTitle}\nSite: ${siteName}\nDescription: ${(ogDescription || '').slice(0, 300)}\nSchema: ${JSON.stringify(jsonLd).slice(0, 400)}`;
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "x-api-key": apiKey, "anthropic-version": "2023-06-01",
+        "content-type": "application/json", "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: "claude-haiku-4-5-20251001", max_tokens: 256,
+        messages: [{ role: "user", content: `From this beauty product page, return JSON only (no markdown): {"name":"full product name","brand":"brand name","category":"one of: Skincare, Makeup, Haircare, Body Care, Fragrance, Tools & Accessories, Other","productType":"e.g. Serum, Moisturiser, Shampoo, Conditioner, Foundation"}. Leave empty string if unknown.\n\n${context}` }],
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const raw = data.content?.[0]?.text || '{}';
+      const clean = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+      try { extracted = { ...extracted, ...JSON.parse(clean) }; } catch (e) {}
+    }
+  }
+
+  return {
+    name: extracted.name || ogTitle,
+    brand: extracted.brand || siteName,
+    category: extracted.category || '',
+    productType: extracted.productType || '',
+    imageUri: ogImage || '',
+    price: price ? String(price) : '',
+  };
+}
+
 // ─── Image resize helper ─────────────────────────────────────────────
 function resizeImageToDataURL(file, maxDimension = 800, quality = 0.82) {
   return new Promise((resolve, reject) => {
@@ -495,7 +552,7 @@ const AddEditProductScreen = ({ navigate, editProduct, prefill }) => {
   const { dispatch } = useContext(AppContext);
   const isEdit = !!editProduct;
   const initial = editProduct || prefill || {
-    name: "", brand: "", category: "", productType: "", imageUri: "", purchaseLocation: "",
+    name: "", brand: "", category: "", productType: "", url: "", imageUri: "", purchaseLocation: "",
     originalPrice: "", discountDescription: "", finalPrice: "",
     status: "new", rating: 0, wouldRepurchase: "", thoughts: [],
   };
@@ -513,6 +570,30 @@ const AddEditProductScreen = ({ navigate, editProduct, prefill }) => {
       set("imageUri", dataUrl);
     } catch (err) {
       console.error("Photo processing failed:", err);
+    }
+  };
+
+  const [fetching, setFetching] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
+
+  const handleFetchUrl = async () => {
+    const url = form.url?.trim();
+    if (!url) return;
+    setFetching(true);
+    setFetchError(null);
+    try {
+      const data = await fetchProductFromUrl(url);
+      if (data.name) set("name", data.name);
+      if (data.brand) set("brand", data.brand);
+      if (data.category && CATEGORIES.includes(data.category)) set("category", data.category);
+      if (data.productType) set("productType", data.productType);
+      if (data.imageUri) set("imageUri", data.imageUri);
+      if (data.price) set("originalPrice", data.price);
+    } catch (err) {
+      console.error("URL fetch error:", err);
+      setFetchError("Couldn't fetch details. Check the URL and try again.");
+    } finally {
+      setFetching(false);
     }
   };
 
@@ -608,6 +689,15 @@ const AddEditProductScreen = ({ navigate, editProduct, prefill }) => {
       {/* Section 1: Product Info */}
       {section === 0 && (
         <div>
+          <div style={{ marginBottom: 16 }}>
+            <Input label="Product URL" value={form.url || ""} onChange={e => { set("url", e.target.value); setFetchError(null); }} placeholder="https://sephora.com/product/..." />
+            <Btn onClick={handleFetchUrl} disabled={fetching || !form.url?.trim()} variant="secondary"
+              style={{ width: "100%", fontSize: 14, padding: "10px 16px", marginTop: -8, opacity: fetching || !form.url?.trim() ? 0.6 : 1 }}>
+              <Icons.Sparkles style={{ width: 16, height: 16 }} />
+              {fetching ? "Fetching details…" : "Fetch Product Details"}
+            </Btn>
+            {fetchError && <p style={{ fontSize: 12, color: "#C0392B", marginTop: 6 }}>{fetchError}</p>}
+          </div>
           <Input label="Product Name *" value={form.name} onChange={e => set("name", e.target.value)} placeholder="e.g. Watermelon Glow Moisturizer" />
           <Input label="Brand" value={form.brand} onChange={e => set("brand", e.target.value)} placeholder="e.g. Glow Recipe" />
           <Select label="Category" options={CATEGORIES} value={form.category} onChange={e => set("category", e.target.value)} />
@@ -889,9 +979,30 @@ const AddEditWishlistScreen = ({ navigate, editItem }) => {
   const { dispatch } = useContext(AppContext);
   const isEdit = !!editItem;
   const [form, setForm] = useState(editItem || {
-    name: "", brand: "", category: "", reasonForInterest: "", estimatedPrice: "", source: "", priority: "medium",
+    name: "", brand: "", category: "", reasonForInterest: "", estimatedPrice: "", source: "", priority: "medium", url: "",
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const [fetching, setFetching] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
+
+  const handleFetchUrl = async () => {
+    const url = form.url?.trim();
+    if (!url) return;
+    setFetching(true);
+    setFetchError(null);
+    try {
+      const data = await fetchProductFromUrl(url);
+      if (data.name) set("name", data.name);
+      if (data.brand) set("brand", data.brand);
+      if (data.category && CATEGORIES.includes(data.category)) set("category", data.category);
+      if (data.price) set("estimatedPrice", data.price);
+    } catch (err) {
+      console.error("URL fetch error:", err);
+      setFetchError("Couldn't fetch details. Check the URL and try again.");
+    } finally {
+      setFetching(false);
+    }
+  };
 
   const save = () => {
     if (!form.name.trim()) return;
@@ -909,6 +1020,15 @@ const AddEditWishlistScreen = ({ navigate, editItem }) => {
     <div style={{ padding: "20px 20px 100px" }}>
       <BackHeader title={isEdit ? "Edit Wishlist Item" : "Add to Wishlist"} onBack={() => navigate("back")} />
 
+      <div style={{ marginBottom: 16 }}>
+        <Input label="Product URL" value={form.url || ""} onChange={e => { set("url", e.target.value); setFetchError(null); }} placeholder="https://sephora.com/product/..." />
+        <Btn onClick={handleFetchUrl} disabled={fetching || !form.url?.trim()} variant="secondary"
+          style={{ width: "100%", fontSize: 14, padding: "10px 16px", marginTop: -8, opacity: fetching || !form.url?.trim() ? 0.6 : 1 }}>
+          <Icons.Sparkles style={{ width: 16, height: 16 }} />
+          {fetching ? "Fetching details…" : "Fetch Product Details"}
+        </Btn>
+        {fetchError && <p style={{ fontSize: 12, color: "#C0392B", marginTop: 6 }}>{fetchError}</p>}
+      </div>
       <Input label="Product Name *" value={form.name} onChange={e => set("name", e.target.value)} placeholder="e.g. Drunk Elephant Protini" />
       <Input label="Brand" value={form.brand} onChange={e => set("brand", e.target.value)} placeholder="e.g. Drunk Elephant" />
       <Select label="Category" options={CATEGORIES} value={form.category} onChange={e => set("category", e.target.value)} />
