@@ -343,7 +343,7 @@ const HomeScreen = ({ navigate }) => {
         </Card>
         <Card onClick={() => navigate("wishlist")} style={{ padding: 20, cursor: "pointer", textAlign: "center" }}>
           <Icons.Heart style={{ width: 28, height: 28, color: colors.rose, marginBottom: 8 }} />
-          <div style={{ fontSize: 15, fontWeight: 600, color: colors.text }}>The Favorites Edit</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: colors.text }}>Wishlist</div>
           <div style={{ fontSize: 12, color: colors.textLight, marginTop: 2 }}>{wishlist.length} items</div>
         </Card>
       </div>
@@ -495,7 +495,7 @@ const AddEditProductScreen = ({ navigate, editProduct, prefill }) => {
   const { dispatch } = useContext(AppContext);
   const isEdit = !!editProduct;
   const initial = editProduct || prefill || {
-    name: "", brand: "", category: "", imageUri: "", purchaseLocation: "",
+    name: "", brand: "", category: "", productType: "", imageUri: "", purchaseLocation: "",
     originalPrice: "", discountDescription: "", finalPrice: "",
     status: "new", rating: 0, wouldRepurchase: "", thoughts: [],
   };
@@ -611,6 +611,7 @@ const AddEditProductScreen = ({ navigate, editProduct, prefill }) => {
           <Input label="Product Name *" value={form.name} onChange={e => set("name", e.target.value)} placeholder="e.g. Watermelon Glow Moisturizer" />
           <Input label="Brand" value={form.brand} onChange={e => set("brand", e.target.value)} placeholder="e.g. Glow Recipe" />
           <Select label="Category" options={CATEGORIES} value={form.category} onChange={e => set("category", e.target.value)} />
+          <Input label="Product Type" value={form.productType || ""} onChange={e => set("productType", e.target.value)} placeholder="e.g. Serum, Moisturiser, Shampoo" />
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: colors.textLight, marginBottom: 6 }}>Photo</label>
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageChange} style={{ display: "none" }} />
@@ -841,7 +842,7 @@ const WishlistScreen = ({ navigate }) => {
     <div style={{ padding: "20px 20px 100px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div>
-          <h1 style={{ fontSize: 24, fontWeight: 300, color: colors.text, margin: 0, letterSpacing: -0.5 }}>The Favorites Edit</h1>
+          <h1 style={{ fontSize: 24, fontWeight: 300, color: colors.text, margin: 0, letterSpacing: -0.5 }}>Wishlist</h1>
           <p style={{ fontSize: 13, color: colors.textLight, margin: "4px 0 0", fontStyle: "italic" }}>Products you're dreaming about</p>
         </div>
         <Btn onClick={() => navigate("add-wishlist")} style={{ padding: "10px 16px", fontSize: 13 }}>+ Add</Btn>
@@ -1165,13 +1166,6 @@ export default function TheBeautyEdit() {
     }
   }, []);
 
-  if (!state.onboarded) return (
-    <AppContext.Provider value={{ state, dispatch }}>
-      <div style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", background: colors.cream, minHeight: "100vh" }}>
-        <OnboardingScreen />
-      </div>
-    </AppContext.Provider>
-  );
 
   const renderScreen = () => {
     switch (current.screen) {
