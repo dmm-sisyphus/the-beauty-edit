@@ -12,9 +12,9 @@ html {
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: #FFF8F3;
-  color: #3D2C2C;
+  font-family: 'Libre Baskerville', 'Georgia', serif;
+  background-color: #F9F5F0;
+  color: #2D1F16;
   line-height: 1.5;
   min-height: 100vh;
   min-height: 100dvh;
@@ -53,8 +53,8 @@ input:focus, textarea:focus, select:focus {
 
 /* Selection color */
 ::selection {
-  background-color: #F5D5E0;
-  color: #3D2C2C;
+  background-color: #D4C4B8;
+  color: #2D1F16;
 }
 
 /* Prevent pull-to-refresh on mobile */

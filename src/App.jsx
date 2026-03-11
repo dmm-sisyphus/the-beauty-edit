@@ -29,7 +29,7 @@ const CATEGORIES = ["Skincare", "Makeup", "Haircare", "Body Care", "Fragrance", 
 const STATUSES = ["new", "in-use", "finished"];
 const THOUGHT_TYPES = ["first-impression", "during-use", "final-verdict"];
 const PRIORITIES = ["high", "medium", "low"];
-const CATEGORY_EMOJIS = { Skincare: "✨", Makeup: "💄", Haircare: "💇‍♀️", "Body Care": "🧴", Fragrance: "🌸", "Tools & Accessories": "🪞", Other: "📦" };
+const CATEGORY_EMOJIS = { Skincare: "◆", Makeup: "●", Haircare: "◇", "Body Care": "○", Fragrance: "❖", "Tools & Accessories": "□", Other: "▪" };
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 const now = () => new Date().toISOString();
@@ -95,10 +95,10 @@ const AppContext = createContext();
 
 // ─── Shared UI Components ───────────────────────────────────────────
 const colors = {
-  cream: "#FFF8F3", rose: "#E8A0BF", roseDark: "#C5739B", roseLight: "#F5D5E0",
-  rosePale: "#FFF0F5", blush: "#F9E4EC", text: "#3D2C2C", textLight: "#8B7272",
-  white: "#FFFFFF", border: "#F0E0E0", shadow: "0 2px 12px rgba(200,150,170,0.12)",
-  shadowMd: "0 4px 20px rgba(200,150,170,0.15)",
+  cream: "#F9F5F0", rose: "#6B4C3B", roseDark: "#4A3228", roseLight: "#D4C4B8",
+  rosePale: "#F0E8E0", blush: "#E8DDD4", text: "#2D1F16", textLight: "#8A756A",
+  white: "#FFFFFF", border: "#E0D4C8", shadow: "0 2px 12px rgba(74,50,40,0.08)",
+  shadowMd: "0 4px 20px rgba(74,50,40,0.12)",
 };
 
 const Pill = ({ children, active, onClick, style }) => (
@@ -206,7 +206,7 @@ const StatusSelector = ({ value, onChange }) => (
     <div style={{ display: "flex", gap: 8 }}>
       {STATUSES.map(s => (
         <Pill key={s} active={value === s} onClick={() => onChange(s)}>
-          {s === "new" ? "✨ New" : s === "in-use" ? "💫 In Use" : "✅ Finished"}
+          {s === "new" ? "New" : s === "in-use" ? "In Use" : "Finished"}
         </Pill>
       ))}
     </div>
@@ -219,7 +219,7 @@ const RepurchaseSelector = ({ value, onChange }) => (
     <div style={{ display: "flex", gap: 8 }}>
       {["yes", "no", "maybe"].map(v => (
         <Pill key={v} active={value === v} onClick={() => onChange(v)}>
-          {v === "yes" ? "💕 Yes" : v === "no" ? "👎 No" : "🤔 Maybe"}
+          {v === "yes" ? "Yes" : v === "no" ? "No" : v === "maybe" ? "Maybe" : v}
         </Pill>
       ))}
     </div>
@@ -252,15 +252,15 @@ const OnboardingScreen = () => {
   const { dispatch } = useContext(AppContext);
   const [step, setStep] = useState(0);
   const slides = [
-    { emoji: "✨", title: "Track your beauty journey", desc: "Document every product from first impression to final verdict — your personal beauty diary." },
-    { emoji: "💕", title: "Build your wishlist", desc: "Keep a curated list of products you're dying to try, with notes on why you want them." },
-    { emoji: "📊", title: "See your spending insights", desc: "Know exactly where your money goes and discover your true beauty favorites." },
+    { emoji: "◆", title: "Track your beauty journey", desc: "Document every product from first impression to final verdict — your personal beauty diary." },
+    { emoji: "♡", title: "Build your wishlist", desc: "Keep a curated list of products you're dying to try, with notes on why you want them." },
+    { emoji: "▤", title: "See your spending insights", desc: "Know exactly where your money goes and discover your true beauty favorites." },
   ];
 
   return (
     <div style={{ minHeight: "100vh", background: `linear-gradient(180deg, ${colors.cream} 0%, ${colors.rosePale} 100%)`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ textAlign: "center", marginBottom: 48 }}>
-        <div style={{ fontSize: 48, marginBottom: 12 }}>🌸</div>
+        <div style={{ fontSize: 48, marginBottom: 12 }}>◆</div>
         <h1 style={{ fontSize: 32, fontWeight: 300, color: colors.text, letterSpacing: -0.5, margin: 0 }}>The Beauty Edit</h1>
         <p style={{ fontSize: 14, color: colors.textLight, marginTop: 6, fontStyle: "italic" }}>Your personal beauty journal</p>
       </div>
@@ -287,7 +287,7 @@ const OnboardingScreen = () => {
           </>
         ) : (
           <Btn onClick={() => dispatch({ type: "COMPLETE_ONBOARDING" })} style={{ flex: 1, padding: "16px 24px", fontSize: 17 }}>
-            Get Started 🌸
+            Get Started
           </Btn>
         )}
       </div>
@@ -322,9 +322,9 @@ const HomeScreen = ({ navigate }) => {
       {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 28 }}>
         {[
-          { label: "Products", value: totalProducts, emoji: "📦" },
-          { label: "Avg Rating", value: avgRating, emoji: "⭐" },
-          { label: "Total Spent", value: fmtCurrency(totalSpent), emoji: "💰" },
+          { label: "Products", value: totalProducts, emoji: "◆" },
+          { label: "Avg Rating", value: avgRating, emoji: "★" },
+          { label: "Total Spent", value: fmtCurrency(totalSpent), emoji: "$" },
         ].map(s => (
           <Card key={s.label} style={{ padding: 14, textAlign: "center" }}>
             <div style={{ fontSize: 20, marginBottom: 4 }}>{s.emoji}</div>
@@ -353,7 +353,7 @@ const HomeScreen = ({ navigate }) => {
         <h2 style={{ fontSize: 17, fontWeight: 600, color: colors.text, margin: "0 0 14px" }}>Recent Activity</h2>
         {recent.length === 0 ? (
           <Card style={{ textAlign: "center", padding: 32, color: colors.textLight }}>
-            <div style={{ fontSize: 32, marginBottom: 8 }}>🌿</div>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>◇</div>
             <div>Your beauty journal is waiting for its first entry!</div>
           </Card>
         ) : recent.map(p => (
@@ -429,7 +429,7 @@ const ProductListScreen = ({ navigate }) => {
           <div style={{ fontSize: 12, fontWeight: 600, color: colors.textLight, marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.5 }}>Status</div>
           <div style={{ display: "flex", gap: 6 }}>
             <Pill active={!statusFilter} onClick={() => setStatusFilter("")}>All</Pill>
-            {STATUSES.map(s => <Pill key={s} active={statusFilter === s} onClick={() => setStatusFilter(statusFilter === s ? "" : s)}>{s === "new" ? "✨ New" : s === "in-use" ? "💫 In Use" : "✅ Finished"}</Pill>)}
+            {STATUSES.map(s => <Pill key={s} active={statusFilter === s} onClick={() => setStatusFilter(statusFilter === s ? "" : s)}>{s === "new" ? "New" : s === "in-use" ? "In Use" : "Finished"}</Pill>)}
           </div>
         </Card>
       )}
@@ -772,7 +772,7 @@ const AddEditProductScreen = ({ navigate, editProduct, prefill }) => {
           {(form.thoughts || []).map(t => (
             <Card key={t.id} style={{ padding: 12, marginBottom: 8, position: "relative" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-                <Badge>{t.type === "first-impression" ? "💭 First Impression" : t.type === "during-use" ? "💫 During Use" : "✅ Final Verdict"}</Badge>
+                <Badge>{t.type === "first-impression" ? "First Impression" : t.type === "during-use" ? "During Use" : "Final Verdict"}</Badge>
                 <button onClick={() => removeThought(t.id)} style={{ background: "none", border: "none", cursor: "pointer", color: colors.textLight, padding: 2 }}>
                   <Icons.X style={{ width: 14, height: 14 }} />
                 </button>
@@ -787,7 +787,7 @@ const AddEditProductScreen = ({ navigate, editProduct, prefill }) => {
             <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
               {THOUGHT_TYPES.map(t => (
                 <Pill key={t} active={newThought.type === t} onClick={() => setNewThought(n => ({ ...n, type: t }))}>
-                  {t === "first-impression" ? "💭 First Impression" : t === "during-use" ? "💫 During Use" : "✅ Final Verdict"}
+                  {t === "first-impression" ? "First Impression" : t === "during-use" ? "During Use" : "Final Verdict"}
                 </Pill>
               ))}
             </div>
@@ -802,7 +802,7 @@ const AddEditProductScreen = ({ navigate, editProduct, prefill }) => {
           <div style={{ display: "flex", gap: 12 }}>
             <Btn variant="secondary" onClick={() => setSection(1)} style={{ flex: 1 }}>← Back</Btn>
             <Btn onClick={save} style={{ flex: 2 }}>
-              {isEdit ? "Save Changes" : "Save Product"} 🌸
+              {isEdit ? "Save Changes" : "Save Product"}
             </Btn>
           </div>
         </div>
@@ -888,7 +888,7 @@ const ProductDetailScreen = ({ product, navigate }) => {
         <h3 style={{ fontSize: 14, fontWeight: 600, color: colors.textLight, margin: "0 0 14px", textTransform: "uppercase", letterSpacing: 0.5 }}>My Beauty Diary</h3>
         {thoughts.length === 0 ? (
           <Card style={{ textAlign: "center", padding: 24, color: colors.textLight }}>
-            <div style={{ fontSize: 24, marginBottom: 8 }}>📝</div>
+            <div style={{ fontSize: 24, marginBottom: 8 }}>◇</div>
             <div style={{ fontSize: 14 }}>No thoughts yet — tap Edit to start your journal</div>
           </Card>
         ) : thoughts.map((t, i) => (
@@ -900,7 +900,7 @@ const ProductDetailScreen = ({ product, navigate }) => {
             </div>
             <Card style={{ flex: 1, padding: 14, marginBottom: 10 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                <Badge>{t.type === "first-impression" ? "💭 First Impression" : t.type === "during-use" ? "💫 During Use" : "✅ Final Verdict"}</Badge>
+                <Badge>{t.type === "first-impression" ? "First Impression" : t.type === "during-use" ? "During Use" : "Final Verdict"}</Badge>
                 <span style={{ fontSize: 11, color: colors.textLight }}>{fmtDate(t.date)}</span>
               </div>
               <div style={{ fontSize: 14, color: colors.text, lineHeight: 1.6 }}>{t.text}</div>
@@ -960,7 +960,7 @@ const WishlistScreen = ({ navigate }) => {
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <Btn variant="primary" onClick={() => promote(w)} style={{ flex: 1, padding: "8px 12px", fontSize: 13 }}>
-              Promote to Journal ✨
+              Promote to Journal →
             </Btn>
             <Btn variant="secondary" onClick={() => navigate("edit-wishlist", w)} style={{ padding: "8px 12px", fontSize: 13 }}>Edit</Btn>
             <button onClick={() => dispatch({ type: "DELETE_WISHLIST", payload: w.id })}
@@ -1041,14 +1041,14 @@ const AddEditWishlistScreen = ({ navigate, editItem }) => {
         <div style={{ display: "flex", gap: 8 }}>
           {PRIORITIES.map(p => (
             <Pill key={p} active={form.priority === p} onClick={() => set("priority", p)}>
-              {p === "high" ? "🔥 High" : p === "medium" ? "💫 Medium" : "🌿 Low"}
+              {p === "high" ? "High" : p === "medium" ? "Medium" : "Low"}
             </Pill>
           ))}
         </div>
       </div>
 
       <Btn onClick={save} style={{ width: "100%", padding: "14px 24px" }}>
-        {isEdit ? "Save Changes" : "Add to Wishlist"} 💕
+        {isEdit ? "Save Changes" : "Add to Wishlist"}
       </Btn>
     </div>
   );
@@ -1095,10 +1095,10 @@ const StatsScreen = () => {
       {/* Summary Cards */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
         {[
-          { label: "Products Reviewed", value: totalProducts, emoji: "📦" },
-          { label: "Average Rating", value: avgRating, emoji: "⭐" },
-          { label: "Total Spent", value: fmtCurrency(totalSpent), emoji: "💰" },
-          { label: "Total Saved", value: fmtCurrency(totalSaved > 0 ? totalSaved : 0), emoji: "🎉" },
+          { label: "Products Reviewed", value: totalProducts, emoji: "◆" },
+          { label: "Average Rating", value: avgRating, emoji: "★" },
+          { label: "Total Spent", value: fmtCurrency(totalSpent), emoji: "$" },
+          { label: "Total Saved", value: fmtCurrency(totalSaved > 0 ? totalSaved : 0), emoji: "↓" },
         ].map(s => (
           <Card key={s.label} style={{ padding: 16, textAlign: "center" }}>
             <div style={{ fontSize: 24, marginBottom: 4 }}>{s.emoji}</div>
@@ -1313,7 +1313,7 @@ export default function TheBeautyEdit() {
 
   return (
     <AppContext.Provider value={{ state, dispatch }}>
-      <div style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", background: colors.cream, minHeight: "100vh", maxWidth: 480, margin: "0 auto", position: "relative" }}>
+      <div style={{ fontFamily: "'Libre Baskerville', 'Georgia', serif", background: colors.cream, minHeight: "100vh", maxWidth: 480, margin: "0 auto", position: "relative" }}>
         {storageWarning && (
           <div style={{
             position: "fixed", top: 0, left: "50%", transform: "translateX(-50%)",
