@@ -21,6 +21,7 @@ const Icons = {
   Sparkles: (p) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/><path d="M5 18l.7 2.1L7.8 21l-2.1.7L5 24l-.7-2.1L2.2 21l2.1-.7L5 18z"/><path d="M19 14l.7 2.1 2.1.7-2.1.7-.7 2.1-.7-2.1-2.1-.7 2.1-.7.7-2.1z"/></svg>,
   Filter: (p) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...p}><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>,
   Sort: (p) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...p}><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="16" y2="12"/><line x1="4" y1="18" x2="12" y2="18"/></svg>,
+  Settings: (p) => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>,
 };
 
 // ─── Constants ──────────────────────────────────────────────────────
@@ -308,9 +309,14 @@ const HomeScreen = ({ navigate }) => {
 
   return (
     <div style={{ padding: "20px 20px 100px" }}>
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ fontSize: 14, color: colors.textLight }}>{greeting} ✨</div>
-        <h1 style={{ fontSize: 26, fontWeight: 300, color: colors.text, margin: "4px 0 0", letterSpacing: -0.5 }}>The Beauty Edit</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+        <div>
+          <div style={{ fontSize: 14, color: colors.textLight }}>{greeting} ✨</div>
+          <h1 style={{ fontSize: 26, fontWeight: 300, color: colors.text, margin: "4px 0 0", letterSpacing: -0.5 }}>The Beauty Edit</h1>
+        </div>
+        <button onClick={() => navigate("settings")} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: colors.textLight, marginTop: 4 }}>
+          <Icons.Settings style={{ width: 22, height: 22 }} />
+        </button>
       </div>
 
       {/* Stats */}
@@ -510,6 +516,54 @@ const AddEditProductScreen = ({ navigate, editProduct, prefill }) => {
     }
   };
 
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState(null);
+
+  const handleAnalyze = async () => {
+    const apiKey = localStorage.getItem("the-beauty-edit-api-key");
+    if (!apiKey) { setAnalyzeError("Add your Anthropic API key in Settings first."); return; }
+    if (!form.imageUri) return;
+    setAnalyzing(true);
+    setAnalyzeError(null);
+    try {
+      const base64 = form.imageUri.replace(/^data:image\/\w+;base64,/, "");
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          "anthropic-dangerous-direct-browser-access": "true",
+        },
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 256,
+          messages: [{ role: "user", content: [
+            { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } },
+            { type: "text", text: `This is a beauty/skincare product. Extract details and return JSON only (no markdown): {"name":"full product name","brand":"brand name","category":"one of: Skincare, Makeup, Haircare, Body Care, Fragrance, Tools & Accessories, Other"}. Leave a field as empty string if not visible.` },
+          ]}],
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error?.message || `API error ${res.status}`);
+      }
+      const data = await res.json();
+      const raw = data.content?.[0]?.text || "{}";
+      // Strip markdown code fences if Claude wraps the JSON
+      const clean = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+      const extracted = JSON.parse(clean);
+      if (extracted.name) set("name", extracted.name);
+      if (extracted.brand) set("brand", extracted.brand);
+      if (extracted.category && CATEGORIES.includes(extracted.category)) set("category", extracted.category);
+    } catch (err) {
+      console.error("Analyze error:", err);
+      setAnalyzeError(err.message.includes("api_key") || err.message.includes("API key") ? "Invalid API key. Check Settings." : "Couldn't analyze photo. Try again.");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   const save = () => {
     if (!form.name.trim()) return;
     const entry = {
@@ -561,18 +615,28 @@ const AddEditProductScreen = ({ navigate, editProduct, prefill }) => {
             <label style={{ display: "block", fontSize: 13, fontWeight: 500, color: colors.textLight, marginBottom: 6 }}>Photo</label>
             <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageChange} style={{ display: "none" }} />
             {form.imageUri ? (
-              <div style={{ position: "relative", width: "100%", height: 200, borderRadius: 14, overflow: "hidden" }}>
-                <img src={form.imageUri} alt="Product photo" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                <button onClick={() => fileInputRef.current?.click()}
-                  style={{ position: "absolute", inset: 0, width: "100%", background: "transparent", border: "none", cursor: "pointer" }}
-                  aria-label="Change photo" />
-                <button onClick={() => set("imageUri", "")}
-                  style={{ position: "absolute", top: 10, right: 10, width: 32, height: 32, borderRadius: 16,
-                    background: "rgba(0,0,0,0.55)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
-                  aria-label="Remove photo">
-                  <Icons.X style={{ width: 16, height: 16, color: "#fff" }} />
-                </button>
-              </div>
+              <>
+                <div style={{ position: "relative", width: "100%", height: 200, borderRadius: 14, overflow: "hidden" }}>
+                  <img src={form.imageUri} alt="Product photo" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  <button onClick={() => fileInputRef.current?.click()}
+                    style={{ position: "absolute", inset: 0, width: "100%", background: "transparent", border: "none", cursor: "pointer" }}
+                    aria-label="Change photo" />
+                  <button onClick={() => set("imageUri", "")}
+                    style={{ position: "absolute", top: 10, right: 10, width: 32, height: 32, borderRadius: 16,
+                      background: "rgba(0,0,0,0.55)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                    aria-label="Remove photo">
+                    <Icons.X style={{ width: 16, height: 16, color: "#fff" }} />
+                  </button>
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <Btn onClick={handleAnalyze} disabled={analyzing} variant="secondary"
+                    style={{ width: "100%", fontSize: 14, padding: "10px 16px", opacity: analyzing ? 0.7 : 1 }}>
+                    <Icons.Sparkles style={{ width: 16, height: 16 }} />
+                    {analyzing ? "Analyzing…" : "Analyze Photo"}
+                  </Btn>
+                  {analyzeError && <p style={{ fontSize: 12, color: "#C0392B", marginTop: 6, textAlign: "center" }}>{analyzeError}</p>}
+                </div>
+              </>
             ) : (
               <div onClick={() => fileInputRef.current?.click()}
                 style={{ width: "100%", height: 140, borderRadius: 14, border: `2px dashed ${colors.border}`, background: colors.cream,
@@ -978,6 +1042,60 @@ const StatsScreen = () => {
   );
 };
 
+// ─── SCREEN: Settings ───────────────────────────────────────────────
+const SettingsScreen = ({ navigate }) => {
+  const saved = localStorage.getItem("the-beauty-edit-api-key") || "";
+  const [apiKey, setApiKey] = useState(saved);
+  const [showKey, setShowKey] = useState(false);
+  const [status, setStatus] = useState(null);
+
+  const handleSave = () => {
+    const trimmed = apiKey.trim();
+    if (trimmed) { localStorage.setItem("the-beauty-edit-api-key", trimmed); setStatus("saved"); }
+  };
+
+  const handleClear = () => {
+    localStorage.removeItem("the-beauty-edit-api-key");
+    setApiKey("");
+    setStatus("cleared");
+  };
+
+  return (
+    <div style={{ padding: "20px 20px 100px" }}>
+      <BackHeader title="Settings" onBack={() => navigate("back")} />
+      <div style={{ background: colors.white, borderRadius: 16, padding: 20, marginBottom: 16, boxShadow: colors.shadow }}>
+        <p style={{ fontSize: 15, fontWeight: 600, color: colors.text, margin: "0 0 6px" }}>Anthropic API Key</p>
+        <p style={{ fontSize: 13, color: colors.textLight, margin: "0 0 16px", lineHeight: 1.6 }}>
+          Used to analyze product photos and auto-fill details. Stored only on this device. Get a key at anthropic.com/api.
+        </p>
+        <div style={{ position: "relative", marginBottom: 12 }}>
+          <input
+            type={showKey ? "text" : "password"}
+            value={apiKey}
+            onChange={e => { setApiKey(e.target.value); setStatus(null); }}
+            placeholder="sk-ant-..."
+            style={{
+              width: "100%", padding: "12px 52px 12px 14px", borderRadius: 12,
+              border: `1.5px solid ${colors.border}`, fontSize: 14, fontFamily: "inherit",
+              background: colors.cream, color: colors.text, boxSizing: "border-box",
+            }}
+          />
+          <button onClick={() => setShowKey(v => !v)} style={{
+            position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
+            background: "none", border: "none", cursor: "pointer", color: colors.textLight, fontSize: 12, fontFamily: "inherit",
+          }}>{showKey ? "Hide" : "Show"}</button>
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <Btn onClick={handleSave} style={{ flex: 1 }}>Save Key</Btn>
+          {saved && <Btn variant="secondary" onClick={handleClear} style={{ flex: 1 }}>Clear</Btn>}
+        </div>
+        {status === "saved" && <p style={{ fontSize: 13, color: "#2D7A3A", marginTop: 10, textAlign: "center" }}>✓ API key saved</p>}
+        {status === "cleared" && <p style={{ fontSize: 13, color: colors.textLight, marginTop: 10, textAlign: "center" }}>Key removed</p>}
+      </div>
+    </div>
+  );
+};
+
 // ─── Storage Helpers ────────────────────────────────────────────────
 const STORAGE_KEY = "the-beauty-edit-data";
 
@@ -1066,6 +1184,7 @@ export default function TheBeautyEdit() {
       case "add-wishlist": return <AddEditWishlistScreen navigate={navigate} />;
       case "edit-wishlist": return <AddEditWishlistScreen navigate={navigate} editItem={current.data} />;
       case "stats": return <StatsScreen />;
+      case "settings": return <SettingsScreen navigate={navigate} />;
       default: return <HomeScreen navigate={navigate} />;
     }
   };
