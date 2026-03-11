@@ -997,18 +997,33 @@ function loadState() {
 function saveState(state) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    return true;
   } catch (e) {
-    console.warn("Failed to save data:", e);
+    // Quota exceeded — strip images and retry so text data is always saved
+    try {
+      const stripped = {
+        ...state,
+        products: state.products.map(p => ({ ...p, imageUri: "" })),
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stripped));
+      return "images_dropped";
+    } catch (e2) {
+      console.warn("Failed to save data:", e2);
+      return false;
+    }
   }
 }
 
 // ─── MAIN APP ───────────────────────────────────────────────────────
 export default function TheBeautyEdit() {
   const [state, dispatch] = useReducer(appReducer, null, loadState);
+  const [storageWarning, setStorageWarning] = useState(false);
 
   // Persist state on every change
   useEffect(() => {
-    saveState(state);
+    const result = saveState(state);
+    if (result === "images_dropped") setStorageWarning(true);
+    else if (result === true) setStorageWarning(false);
   }, [state]);
 
   const [navStack, setNavStack] = useState([{ screen: "home", data: null }]);
@@ -1066,6 +1081,21 @@ export default function TheBeautyEdit() {
   return (
     <AppContext.Provider value={{ state, dispatch }}>
       <div style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", background: colors.cream, minHeight: "100vh", maxWidth: 480, margin: "0 auto", position: "relative" }}>
+        {storageWarning && (
+          <div style={{
+            position: "fixed", top: 0, left: "50%", transform: "translateX(-50%)",
+            width: "100%", maxWidth: 480, zIndex: 200,
+            background: "#FFF3CD", borderBottom: "1px solid #FFEAA7",
+            padding: "10px 16px", display: "flex", alignItems: "center", gap: 10,
+            fontSize: 13, color: "#856404",
+          }}>
+            <span style={{ flex: 1 }}>Storage full — photos won't be saved until space is freed. All other data is safe.</span>
+            <button onClick={() => setStorageWarning(false)}
+              style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "#856404" }}>
+              <Icons.X style={{ width: 16, height: 16 }} />
+            </button>
+          </div>
+        )}
         {/* Screen Content */}
         <div style={{ paddingBottom: 0 }}>
           {renderScreen()}
