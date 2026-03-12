@@ -311,8 +311,10 @@ const HomeScreen = ({ navigate }) => {
     <div style={{ padding: "20px 20px 100px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
         <div>
-          <div style={{ fontSize: 14, color: colors.textLight }}>{greeting} ✨</div>
-          <h1 style={{ fontSize: 26, fontWeight: 300, color: colors.text, margin: "4px 0 0", letterSpacing: -0.5 }}>The Beauty Edit</h1>
+          <div style={{ fontSize: 13, color: colors.textLight, marginBottom: 10 }}>{greeting}</div>
+          <div style={{ fontSize: 10, letterSpacing: 6, color: colors.textLight, fontWeight: 400, textTransform: "uppercase", marginBottom: 3 }}>The</div>
+          <div style={{ fontSize: 28, fontWeight: 700, color: colors.text, lineHeight: 1, margin: "0 0 2px", letterSpacing: -0.5 }}>Beauty</div>
+          <div style={{ fontSize: 18, fontStyle: "italic", fontWeight: 400, color: colors.textLight, lineHeight: 1 }}>Edit</div>
         </div>
         <button onClick={() => navigate("settings")} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: colors.textLight, marginTop: 4 }}>
           <Icons.Settings style={{ width: 22, height: 22 }} />
