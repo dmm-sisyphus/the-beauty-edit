@@ -1,6 +1,6 @@
 import { useState, useReducer, useEffect, createContext, useContext, useRef, useCallback } from "react";
 import { auth, db } from "./firebase";
-import { onAuthStateChanged, signInWithPopup, signOut, GoogleAuthProvider } from "firebase/auth";
+import { onAuthStateChanged, signInWithRedirect, getRedirectResult, signOut, GoogleAuthProvider } from "firebase/auth";
 import { doc, collection, getDocs, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
 
 // ─── Icons (inline SVG components) ──────────────────────────────────
@@ -261,12 +261,10 @@ const SignInScreen = () => {
     setError(null);
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      await signInWithRedirect(auth, provider);
+      // Page will redirect to Google and come back — no code runs after this
     } catch (err) {
-      if (err.code !== "auth/popup-closed-by-user") {
-        setError("Sign in failed. Please try again.");
-      }
-    } finally {
+      setError("Sign in failed. Please try again.");
       setLoading(false);
     }
   };
@@ -1329,6 +1327,9 @@ export default function TheBeautyEdit() {
 
   // Auth state listener
   useEffect(() => {
+    // Handle redirect result from Google sign-in
+    getRedirectResult(auth).catch(err => console.warn("Redirect result error:", err));
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setCurrentUser(user);
