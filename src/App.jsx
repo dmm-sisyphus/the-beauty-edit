@@ -1,6 +1,6 @@
 import { useState, useReducer, useEffect, createContext, useContext, useRef, useCallback } from "react";
 import { auth, db } from "./firebase";
-import { onAuthStateChanged, signInWithRedirect, getRedirectResult, signOut, GoogleAuthProvider } from "firebase/auth";
+import { onAuthStateChanged, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, GoogleAuthProvider } from "firebase/auth";
 import { doc, collection, getDocs, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
 
 // ─── Icons (inline SVG components) ──────────────────────────────────
@@ -259,13 +259,22 @@ const SignInScreen = () => {
   const handleSignIn = async () => {
     setLoading(true);
     setError(null);
+    const provider = new GoogleAuthProvider();
     try {
-      const provider = new GoogleAuthProvider();
-      await signInWithRedirect(auth, provider);
-      // Page will redirect to Google and come back — no code runs after this
-    } catch (err) {
-      setError("Sign in failed. Please try again.");
-      setLoading(false);
+      // Popup works on desktop browsers; redirect is used as fallback for mobile
+      await signInWithPopup(auth, provider);
+    } catch (popupErr) {
+      if (popupErr.code === "auth/popup-blocked" || popupErr.code === "auth/popup-closed-by-user") {
+        try {
+          await signInWithRedirect(auth, provider);
+        } catch (err) {
+          setError(err.message || err.code || "Sign in failed.");
+          setLoading(false);
+        }
+      } else {
+        setError(popupErr.message || popupErr.code || "Sign in failed.");
+        setLoading(false);
+      }
     }
   };
 
@@ -1327,56 +1336,66 @@ export default function TheBeautyEdit() {
 
   // Auth state listener
   useEffect(() => {
-    // Handle redirect result from Google sign-in
-    getRedirectResult(auth).catch(err => console.warn("Redirect result error:", err));
+    let unsubscribe;
 
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setCurrentUser(user);
-        setDataLoading(true);
-
-        // Migrate from localStorage if data exists there
-        try {
-          const saved = localStorage.getItem(STORAGE_KEY);
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            const products = (parsed.products || []).filter(p => p.name);
-            const wishlist = (parsed.wishlist || []).filter(w => w.name);
-            if (products.length > 0 || wishlist.length > 0) {
-              const batch = writeBatch(db);
-              products.forEach(p => batch.set(doc(db, "users", user.uid, "products", p.id), p));
-              wishlist.forEach(w => batch.set(doc(db, "users", user.uid, "wishlist", w.id), w));
-              await batch.commit();
-              localStorage.removeItem(STORAGE_KEY);
-              setMigratedToast(true);
-              setTimeout(() => setMigratedToast(false), 5000);
-            }
-          }
-        } catch (err) {
-          console.warn("Migration failed:", err);
-        }
-
-        // Load data from Firestore
-        try {
-          const [productsSnap, wishlistSnap] = await Promise.all([
-            getDocs(collection(db, "users", user.uid, "products")),
-            getDocs(collection(db, "users", user.uid, "wishlist")),
-          ]);
-          dispatch({ type: "SET_STATE", payload: {
-            products: productsSnap.docs.map(d => d.data()),
-            wishlist: wishlistSnap.docs.map(d => d.data()),
-          }});
-        } catch (err) {
-          console.warn("Failed to load from Firestore:", err);
-        }
-
-        setDataLoading(false);
-      } else {
-        setCurrentUser(null);
-        dispatch({ type: "SET_STATE", payload: { products: [], wishlist: [] } });
+    const init = async () => {
+      // Await redirect result first so auth state is settled before we listen
+      try {
+        await getRedirectResult(auth);
+      } catch (err) {
+        console.warn("Redirect result error:", err.code, err.message);
       }
-    });
-    return unsubscribe;
+
+      unsubscribe = onAuthStateChanged(auth, async (user) => {
+        if (user) {
+          setCurrentUser(user);
+          setDataLoading(true);
+
+          // Migrate from localStorage if data exists there
+          try {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+              const parsed = JSON.parse(saved);
+              const products = (parsed.products || []).filter(p => p.name);
+              const wishlist = (parsed.wishlist || []).filter(w => w.name);
+              if (products.length > 0 || wishlist.length > 0) {
+                const batch = writeBatch(db);
+                products.forEach(p => batch.set(doc(db, "users", user.uid, "products", p.id), p));
+                wishlist.forEach(w => batch.set(doc(db, "users", user.uid, "wishlist", w.id), w));
+                await batch.commit();
+                localStorage.removeItem(STORAGE_KEY);
+                setMigratedToast(true);
+                setTimeout(() => setMigratedToast(false), 5000);
+              }
+            }
+          } catch (err) {
+            console.warn("Migration failed:", err);
+          }
+
+          // Load data from Firestore
+          try {
+            const [productsSnap, wishlistSnap] = await Promise.all([
+              getDocs(collection(db, "users", user.uid, "products")),
+              getDocs(collection(db, "users", user.uid, "wishlist")),
+            ]);
+            dispatch({ type: "SET_STATE", payload: {
+              products: productsSnap.docs.map(d => d.data()),
+              wishlist: wishlistSnap.docs.map(d => d.data()),
+            }});
+          } catch (err) {
+            console.warn("Failed to load from Firestore:", err);
+          }
+
+          setDataLoading(false);
+        } else {
+          setCurrentUser(null);
+          dispatch({ type: "SET_STATE", payload: { products: [], wishlist: [] } });
+        }
+      });
+    };
+
+    init();
+    return () => unsubscribe?.();
   }, []);
 
   const [navStack, setNavStack] = useState([{ screen: "home", data: null }]);
