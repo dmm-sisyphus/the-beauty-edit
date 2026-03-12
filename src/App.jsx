@@ -1,4 +1,7 @@
 import { useState, useReducer, useEffect, createContext, useContext, useRef, useCallback } from "react";
+import { auth, db } from "./firebase";
+import { onAuthStateChanged, signInWithPopup, signOut, GoogleAuthProvider } from "firebase/auth";
+import { doc, collection, getDocs, setDoc, deleteDoc, writeBatch } from "firebase/firestore";
 
 // ─── Icons (inline SVG components) ──────────────────────────────────
 const Icons = {
@@ -87,6 +90,7 @@ function appReducer(state, action) {
       return { ...state, wishlist: state.wishlist.filter(w => w.id !== action.payload) };
     }
     case "COMPLETE_ONBOARDING": return { ...state, onboarded: true };
+    case "SET_STATE": return { ...state, ...action.payload };
     default: return state;
   }
 }
@@ -246,6 +250,48 @@ const EmptyState = ({ icon: Icon, title, subtitle, action }) => (
     {action}
   </div>
 );
+
+// ─── SCREEN: Sign In ────────────────────────────────────────────────
+const SignInScreen = () => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  const handleSignIn = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (err) {
+      if (err.code !== "auth/popup-closed-by-user") {
+        setError("Sign in failed. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: `linear-gradient(180deg, ${colors.cream} 0%, ${colors.rosePale} 100%)`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32, fontFamily: "'Libre Baskerville', 'Georgia', serif" }}>
+      <div style={{ textAlign: "center", marginBottom: 48 }}>
+        <div style={{ fontSize: 10, letterSpacing: 6, color: colors.textLight, fontWeight: 400, textTransform: "uppercase", marginBottom: 6 }}>The</div>
+        <div style={{ fontSize: 40, fontWeight: 700, color: colors.text, lineHeight: 1, letterSpacing: -1 }}>Beauty</div>
+        <div style={{ fontSize: 24, fontStyle: "italic", fontWeight: 400, color: colors.textLight, lineHeight: 1.2 }}>Edit</div>
+        <div style={{ width: 40, height: 1, background: colors.roseLight, margin: "16px auto 0" }} />
+        <p style={{ fontSize: 14, color: colors.textLight, marginTop: 16, fontStyle: "italic" }}>Your personal beauty journal</p>
+      </div>
+      <Card style={{ maxWidth: 320, width: "100%", textAlign: "center", padding: 32 }}>
+        <p style={{ fontSize: 14, color: colors.textLight, marginBottom: 24, lineHeight: 1.6 }}>
+          Sign in to keep your journal safe and accessible from any device.
+        </p>
+        <Btn onClick={handleSignIn} disabled={loading} style={{ width: "100%", padding: "14px 24px", fontSize: 16, opacity: loading ? 0.7 : 1 }}>
+          {loading ? "Signing in…" : "Sign in with Google"}
+        </Btn>
+        {error && <p style={{ fontSize: 13, color: "#C0392B", marginTop: 12 }}>{error}</p>}
+      </Card>
+    </div>
+  );
+};
 
 // ─── SCREEN: Onboarding ─────────────────────────────────────────────
 const OnboardingScreen = () => {
@@ -1166,7 +1212,7 @@ const StatsScreen = () => {
 };
 
 // ─── SCREEN: Settings ───────────────────────────────────────────────
-const SettingsScreen = ({ navigate }) => {
+const SettingsScreen = ({ navigate, currentUser }) => {
   const saved = localStorage.getItem("the-beauty-edit-api-key") || "";
   const [apiKey, setApiKey] = useState(saved);
   const [showKey, setShowKey] = useState(false);
@@ -1183,9 +1229,30 @@ const SettingsScreen = ({ navigate }) => {
     setStatus("cleared");
   };
 
+  const handleSignOut = async () => {
+    await signOut(auth);
+  };
+
   return (
     <div style={{ padding: "20px 20px 100px" }}>
       <BackHeader title="Settings" onBack={() => navigate("back")} />
+
+      {/* Account */}
+      {currentUser && (
+        <div style={{ background: colors.white, borderRadius: 16, padding: 20, marginBottom: 16, boxShadow: colors.shadow }}>
+          <p style={{ fontSize: 15, fontWeight: 600, color: colors.text, margin: "0 0 14px" }}>Account</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+            {currentUser.photoURL && <img src={currentUser.photoURL} alt="" style={{ width: 40, height: 40, borderRadius: 20 }} />}
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: colors.text }}>{currentUser.displayName}</div>
+              <div style={{ fontSize: 13, color: colors.textLight }}>{currentUser.email}</div>
+            </div>
+          </div>
+          <Btn variant="secondary" onClick={handleSignOut} style={{ width: "100%" }}>Sign Out</Btn>
+        </div>
+      )}
+
+      {/* Anthropic API Key */}
       <div style={{ background: colors.white, borderRadius: 16, padding: 20, marginBottom: 16, boxShadow: colors.shadow }}>
         <p style={{ fontSize: 15, fontWeight: 600, color: colors.text, margin: "0 0 6px" }}>Anthropic API Key</p>
         <p style={{ fontSize: 13, color: colors.textLight, margin: "0 0 16px", lineHeight: 1.6 }}>
@@ -1219,57 +1286,100 @@ const SettingsScreen = ({ navigate }) => {
   );
 };
 
-// ─── Storage Helpers ────────────────────────────────────────────────
+// ─── Storage key (used only for migration check) ─────────────────────
 const STORAGE_KEY = "the-beauty-edit-data";
-
-function loadState() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return { products: parsed.products || [], wishlist: parsed.wishlist || [], onboarded: parsed.onboarded || false };
-    }
-  } catch (e) {
-    console.warn("Failed to load saved data:", e);
-  }
-  return { products: SAMPLE_PRODUCTS, wishlist: SAMPLE_WISHLIST, onboarded: false };
-}
-
-function saveState(state) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    return true;
-  } catch (e) {
-    // Quota exceeded — strip images and retry so text data is always saved
-    try {
-      const stripped = {
-        ...state,
-        products: state.products.map(p => ({ ...p, imageUri: "" })),
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(stripped));
-      return "images_dropped";
-    } catch (e2) {
-      console.warn("Failed to save data:", e2);
-      return false;
-    }
-  }
-}
 
 // ─── MAIN APP ───────────────────────────────────────────────────────
 export default function TheBeautyEdit() {
-  const [state, dispatch] = useReducer(appReducer, null, loadState);
-  const [storageWarning, setStorageWarning] = useState(false);
+  const [state, dispatch] = useReducer(appReducer, { products: [], wishlist: [], onboarded: true });
+  const [currentUser, setCurrentUser] = useState(undefined); // undefined = resolving auth
+  const [dataLoading, setDataLoading] = useState(false);
+  const [migratedToast, setMigratedToast] = useState(false);
 
-  // Persist state on every change
+  // Firestore-aware dispatch: optimistic local update + cloud write
+  const firebaseDispatch = useCallback(async (action) => {
+    dispatch(action);
+    const user = auth.currentUser;
+    if (!user) return;
+    const uid = user.uid;
+    try {
+      switch (action.type) {
+        case "ADD_PRODUCT":
+        case "UPDATE_PRODUCT":
+          await setDoc(doc(db, "users", uid, "products", action.payload.id), action.payload);
+          break;
+        case "DELETE_PRODUCT":
+          await deleteDoc(doc(db, "users", uid, "products", action.payload));
+          break;
+        case "ADD_WISHLIST":
+        case "UPDATE_WISHLIST":
+          await setDoc(doc(db, "users", uid, "wishlist", action.payload.id), action.payload);
+          break;
+        case "DELETE_WISHLIST":
+        case "PROMOTE_WISHLIST":
+          await deleteDoc(doc(db, "users", uid, "wishlist", action.payload));
+          break;
+        default:
+          break;
+      }
+    } catch (err) {
+      console.warn("Firestore write failed:", err);
+    }
+  }, []);
+
+  // Auth state listener
   useEffect(() => {
-    const result = saveState(state);
-    if (result === "images_dropped") setStorageWarning(true);
-    else if (result === true) setStorageWarning(false);
-  }, [state]);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        setCurrentUser(user);
+        setDataLoading(true);
+
+        // Migrate from localStorage if data exists there
+        try {
+          const saved = localStorage.getItem(STORAGE_KEY);
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            const products = (parsed.products || []).filter(p => p.name);
+            const wishlist = (parsed.wishlist || []).filter(w => w.name);
+            if (products.length > 0 || wishlist.length > 0) {
+              const batch = writeBatch(db);
+              products.forEach(p => batch.set(doc(db, "users", user.uid, "products", p.id), p));
+              wishlist.forEach(w => batch.set(doc(db, "users", user.uid, "wishlist", w.id), w));
+              await batch.commit();
+              localStorage.removeItem(STORAGE_KEY);
+              setMigratedToast(true);
+              setTimeout(() => setMigratedToast(false), 5000);
+            }
+          }
+        } catch (err) {
+          console.warn("Migration failed:", err);
+        }
+
+        // Load data from Firestore
+        try {
+          const [productsSnap, wishlistSnap] = await Promise.all([
+            getDocs(collection(db, "users", user.uid, "products")),
+            getDocs(collection(db, "users", user.uid, "wishlist")),
+          ]);
+          dispatch({ type: "SET_STATE", payload: {
+            products: productsSnap.docs.map(d => d.data()),
+            wishlist: wishlistSnap.docs.map(d => d.data()),
+          }});
+        } catch (err) {
+          console.warn("Failed to load from Firestore:", err);
+        }
+
+        setDataLoading(false);
+      } else {
+        setCurrentUser(null);
+        dispatch({ type: "SET_STATE", payload: { products: [], wishlist: [] } });
+      }
+    });
+    return unsubscribe;
+  }, []);
 
   const [navStack, setNavStack] = useState([{ screen: "home", data: null }]);
   const [activeTab, setActiveTab] = useState("home");
-
   const current = navStack[navStack.length - 1];
 
   const navigate = useCallback((screen, data = null, extra = null) => {
@@ -1277,7 +1387,6 @@ export default function TheBeautyEdit() {
       setNavStack(s => s.length > 1 ? s.slice(0, -1) : s);
       return;
     }
-    // Tab screens reset the stack
     if (["home", "products", "wishlist", "stats"].includes(screen)) {
       setActiveTab(screen);
       setNavStack([{ screen, data }]);
@@ -1288,6 +1397,23 @@ export default function TheBeautyEdit() {
     }
   }, []);
 
+  // Show splash while auth resolves
+  if (currentUser === undefined) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: colors.cream, fontFamily: "'Libre Baskerville', 'Georgia', serif" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 10, letterSpacing: 6, color: colors.textLight, fontWeight: 400, textTransform: "uppercase", marginBottom: 6 }}>The</div>
+          <div style={{ fontSize: 40, fontWeight: 700, color: colors.text, lineHeight: 1, letterSpacing: -1 }}>Beauty</div>
+          <div style={{ fontSize: 24, fontStyle: "italic", fontWeight: 400, color: colors.textLight }}>Edit</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show sign-in screen if not authenticated
+  if (!currentUser) {
+    return <SignInScreen />;
+  }
 
   const renderScreen = () => {
     switch (current.screen) {
@@ -1300,7 +1426,7 @@ export default function TheBeautyEdit() {
       case "add-wishlist": return <AddEditWishlistScreen navigate={navigate} />;
       case "edit-wishlist": return <AddEditWishlistScreen navigate={navigate} editItem={current.data} />;
       case "stats": return <StatsScreen />;
-      case "settings": return <SettingsScreen navigate={navigate} />;
+      case "settings": return <SettingsScreen navigate={navigate} currentUser={currentUser} />;
       default: return <HomeScreen navigate={navigate} />;
     }
   };
@@ -1314,24 +1440,18 @@ export default function TheBeautyEdit() {
   ];
 
   return (
-    <AppContext.Provider value={{ state, dispatch }}>
+    <AppContext.Provider value={{ state, dispatch: firebaseDispatch }}>
       <div style={{ fontFamily: "'Libre Baskerville', 'Georgia', serif", background: colors.cream, minHeight: "100vh", maxWidth: 480, margin: "0 auto", position: "relative" }}>
-        {storageWarning && (
-          <div style={{
-            position: "fixed", top: 0, left: "50%", transform: "translateX(-50%)",
-            width: "100%", maxWidth: 480, zIndex: 200,
-            background: "#FFF3CD", borderBottom: "1px solid #FFEAA7",
-            padding: "10px 16px", display: "flex", alignItems: "center", gap: 10,
-            fontSize: 13, color: "#856404",
-          }}>
-            <span style={{ flex: 1 }}>Storage full — photos won't be saved until space is freed. All other data is safe.</span>
-            <button onClick={() => setStorageWarning(false)}
-              style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: "#856404" }}>
-              <Icons.X style={{ width: 16, height: 16 }} />
-            </button>
+        {dataLoading && (
+          <div style={{ position: "fixed", top: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, zIndex: 200, background: colors.rosePale, borderBottom: `1px solid ${colors.border}`, padding: "10px 16px", textAlign: "center", fontSize: 13, color: colors.roseDark }}>
+            Loading your journal…
           </div>
         )}
-        {/* Screen Content */}
+        {migratedToast && (
+          <div style={{ position: "fixed", top: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, zIndex: 200, background: "#E8F5E9", borderBottom: "1px solid #C8E6C9", padding: "10px 16px", textAlign: "center", fontSize: 13, color: "#2E7D32" }}>
+            Your data has been migrated to the cloud.
+          </div>
+        )}
         <div style={{ paddingBottom: 0 }}>
           {renderScreen()}
         </div>
