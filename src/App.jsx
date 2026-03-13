@@ -1300,13 +1300,14 @@ const STORAGE_KEY = "the-beauty-edit-data";
 export default function TheBeautyEdit() {
   const [state, dispatch] = useReducer(appReducer, { products: [], wishlist: [], onboarded: true });
   const [currentUser, setCurrentUser] = useState(undefined); // undefined = resolving auth
-  const [dataLoading, setDataLoading] = useState(false);
   const [migratedToast, setMigratedToast] = useState(false);
+  const currentUserRef = useRef(null);
 
   // Firestore-aware dispatch: optimistic local update + cloud write
   const firebaseDispatch = useCallback(async (action) => {
     dispatch(action);
-    const user = auth.currentUser;
+    const user = currentUserRef.current;
+    console.log("[dispatch]", action.type, "user:", user?.uid ?? "NULL");
     if (!user) return;
     const uid = user.uid;
     try {
@@ -1330,72 +1331,74 @@ export default function TheBeautyEdit() {
           break;
       }
     } catch (err) {
-      console.warn("Firestore write failed:", err);
+      console.error("Firestore write failed:", err.code, err.message);
+      alert("Save failed: " + (err.code || err.message));
     }
   }, []);
 
   // Auth state listener
   useEffect(() => {
-    let unsubscribe;
+    // Handle redirect result in background (for mobile redirect sign-in)
+    // Do NOT await this — it blocks onAuthStateChanged on desktop/popup auth
+    getRedirectResult(auth).catch(err => {
+      console.warn("Redirect result error:", err.code, err.message);
+    });
 
-    const init = async () => {
-      // Await redirect result first so auth state is settled before we listen
-      try {
-        await getRedirectResult(auth);
-      } catch (err) {
-        console.warn("Redirect result error:", err.code, err.message);
-      }
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      console.log("[auth] state changed, user:", user?.uid ?? "null");
+      if (user) {
+        currentUserRef.current = user;
+        setCurrentUser(user);
+        console.log("[step1] setCurrentUser done");
 
-      unsubscribe = onAuthStateChanged(auth, async (user) => {
-        if (user) {
-          setCurrentUser(user);
-          setDataLoading(true);
-
-          // Migrate from localStorage if data exists there
-          try {
-            const saved = localStorage.getItem(STORAGE_KEY);
-            if (saved) {
-              const parsed = JSON.parse(saved);
-              const products = (parsed.products || []).filter(p => p.name);
-              const wishlist = (parsed.wishlist || []).filter(w => w.name);
-              if (products.length > 0 || wishlist.length > 0) {
-                const batch = writeBatch(db);
-                products.forEach(p => batch.set(doc(db, "users", user.uid, "products", p.id), p));
-                wishlist.forEach(w => batch.set(doc(db, "users", user.uid, "wishlist", w.id), w));
-                await batch.commit();
-                localStorage.removeItem(STORAGE_KEY);
-                setMigratedToast(true);
-                setTimeout(() => setMigratedToast(false), 5000);
-              }
+        // Migrate from localStorage if data exists there
+        try {
+          console.log("[step2] checking localStorage");
+          const saved = localStorage.getItem(STORAGE_KEY);
+          console.log("[step2] localStorage data:", saved ? "found" : "empty");
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            const products = (parsed.products || []).filter(p => p.name);
+            const wishlist = (parsed.wishlist || []).filter(w => w.name);
+            console.log("[step2] migrating", products.length, "products,", wishlist.length, "wishlist items");
+            if (products.length > 0 || wishlist.length > 0) {
+              const batch = writeBatch(db);
+              products.forEach(p => batch.set(doc(db, "users", user.uid, "products", p.id), p));
+              wishlist.forEach(w => batch.set(doc(db, "users", user.uid, "wishlist", w.id), w));
+              await batch.commit();
+              localStorage.removeItem(STORAGE_KEY);
+              setMigratedToast(true);
+              setTimeout(() => setMigratedToast(false), 5000);
             }
-          } catch (err) {
-            console.warn("Migration failed:", err);
           }
-
-          // Load data from Firestore
-          try {
-            const [productsSnap, wishlistSnap] = await Promise.all([
-              getDocs(collection(db, "users", user.uid, "products")),
-              getDocs(collection(db, "users", user.uid, "wishlist")),
-            ]);
-            dispatch({ type: "SET_STATE", payload: {
-              products: productsSnap.docs.map(d => d.data()),
-              wishlist: wishlistSnap.docs.map(d => d.data()),
-            }});
-          } catch (err) {
-            console.warn("Failed to load from Firestore:", err);
-          }
-
-          setDataLoading(false);
-        } else {
-          setCurrentUser(null);
-          dispatch({ type: "SET_STATE", payload: { products: [], wishlist: [] } });
+        } catch (err) {
+          console.error("[step2] migration error:", err.code, err.message);
         }
-      });
-    };
 
-    init();
-    return () => unsubscribe?.();
+        // Load data from Firestore
+        console.log("[step3] starting Firestore fetch for uid:", user.uid);
+        try {
+          const [productsSnap, wishlistSnap] = await Promise.all([
+            getDocs(collection(db, "users", user.uid, "products")),
+            getDocs(collection(db, "users", user.uid, "wishlist")),
+          ]);
+          console.log("[load] products:", productsSnap.size, "wishlist:", wishlistSnap.size);
+          dispatch({ type: "SET_STATE", payload: {
+            products: productsSnap.docs.map(d => d.data()),
+            wishlist: wishlistSnap.docs.map(d => d.data()),
+          }});
+        } catch (err) {
+          console.error("[load] FAILED:", err.code, err.message);
+        }
+
+      } else {
+        currentUserRef.current = null;
+        setCurrentUser(null);
+        dispatch({ type: "SET_STATE", payload: { products: [], wishlist: [] } });
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const [navStack, setNavStack] = useState([{ screen: "home", data: null }]);
@@ -1462,11 +1465,6 @@ export default function TheBeautyEdit() {
   return (
     <AppContext.Provider value={{ state, dispatch: firebaseDispatch }}>
       <div style={{ fontFamily: "'Libre Baskerville', 'Georgia', serif", background: colors.cream, minHeight: "100vh", maxWidth: 480, margin: "0 auto", position: "relative" }}>
-        {dataLoading && (
-          <div style={{ position: "fixed", top: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, zIndex: 200, background: colors.rosePale, borderBottom: `1px solid ${colors.border}`, padding: "10px 16px", textAlign: "center", fontSize: 13, color: colors.roseDark }}>
-            Loading your journal…
-          </div>
-        )}
         {migratedToast && (
           <div style={{ position: "fixed", top: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, zIndex: 200, background: "#E8F5E9", borderBottom: "1px solid #C8E6C9", padding: "10px 16px", textAlign: "center", fontSize: 13, color: "#2E7D32" }}>
             Your data has been migrated to the cloud.
