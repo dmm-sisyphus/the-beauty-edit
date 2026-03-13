@@ -1351,28 +1351,26 @@ export default function TheBeautyEdit() {
         setCurrentUser(user);
         console.log("[step1] setCurrentUser done");
 
-        // Migrate from localStorage if data exists there
+        // Migrate from localStorage if data exists there (5s timeout to prevent blocking)
         try {
-          console.log("[step2] checking localStorage");
           const saved = localStorage.getItem(STORAGE_KEY);
-          console.log("[step2] localStorage data:", saved ? "found" : "empty");
           if (saved) {
+            localStorage.removeItem(STORAGE_KEY); // Remove first so we never retry on failure
             const parsed = JSON.parse(saved);
             const products = (parsed.products || []).filter(p => p.name);
             const wishlist = (parsed.wishlist || []).filter(w => w.name);
-            console.log("[step2] migrating", products.length, "products,", wishlist.length, "wishlist items");
             if (products.length > 0 || wishlist.length > 0) {
               const batch = writeBatch(db);
               products.forEach(p => batch.set(doc(db, "users", user.uid, "products", p.id), p));
               wishlist.forEach(w => batch.set(doc(db, "users", user.uid, "wishlist", w.id), w));
-              await batch.commit();
-              localStorage.removeItem(STORAGE_KEY);
+              const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 5000));
+              await Promise.race([batch.commit(), timeout]);
               setMigratedToast(true);
               setTimeout(() => setMigratedToast(false), 5000);
             }
           }
         } catch (err) {
-          console.error("[step2] migration error:", err.code, err.message);
+          console.warn("Migration skipped:", err.message);
         }
 
         // Load data from Firestore
