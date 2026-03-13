@@ -1376,9 +1376,14 @@ export default function TheBeautyEdit() {
         // Load data from Firestore
         console.log("[step3] starting Firestore fetch for uid:", user.uid);
         try {
-          const [productsSnap, wishlistSnap] = await Promise.all([
-            getDocs(collection(db, "users", user.uid, "products")),
-            getDocs(collection(db, "users", user.uid, "wishlist")),
+          console.log("[load] projectId:", db.app.options.projectId);
+          const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error("Firestore timeout after 8s")), 8000));
+          const [productsSnap, wishlistSnap] = await Promise.race([
+            Promise.all([
+              getDocs(collection(db, "users", user.uid, "products")),
+              getDocs(collection(db, "users", user.uid, "wishlist")),
+            ]),
+            timeout,
           ]);
           console.log("[load] products:", productsSnap.size, "wishlist:", wishlistSnap.size);
           dispatch({ type: "SET_STATE", payload: {
@@ -1386,7 +1391,7 @@ export default function TheBeautyEdit() {
             wishlist: wishlistSnap.docs.map(d => d.data()),
           }});
         } catch (err) {
-          console.error("[load] FAILED:", err.code, err.message);
+          console.error("[load] FAILED:", err.code ?? err.message);
         }
 
       } else {
